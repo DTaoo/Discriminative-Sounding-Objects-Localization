@@ -41,6 +41,7 @@ def location_model_train(model, av_model_fix, data_loader, optimizer, criterion_
     count = 0
     losses_g = 0
     losses_l = 0
+    obj_rep = np.tile(obj_rep, (8,1))
     obj_rep_cuda = torch.from_numpy(obj_rep).type(torch.FloatTensor).cuda()
     for i, data in enumerate(data_loader, 0):
         if i % 200 == 0:
@@ -79,7 +80,7 @@ def location_model_train(model, av_model_fix, data_loader, optimizer, criterion_
             optimizer.step()
         else:
             losses = loss_local + loss_global
-            optimizer.step()
+            losses.backward()
             optimizer.step()
 
         losses_g += loss_global.detach().cpu().numpy()
@@ -98,14 +99,14 @@ def location_model_train(model, av_model_fix, data_loader, optimizer, criterion_
 def main():
     parser = argparse.ArgumentParser(description='AID_PRETRAIN')
     parser.add_argument('--data_list_dir', type=str,
-                        default='/mnt/home/hudi/location_sound/audioset-exp/data/audioset_single')
+                        default='/mnt/home/hudi/location_sound/audioset-exp/data/audioset_multi')
     parser.add_argument('--data_dir', type=str, default='/mnt/scratch/hudi/audioset-instrument/')
     parser.add_argument('--mode', type=str, default='train', help='train/val/test')
     parser.add_argument('--use_class_task', type=int, default=1, help='whether to use class task')
     parser.add_argument('--init_num', type=int, default=0, help='epoch number for initializing the location model')
-    parser.add_argument('--use_pretrain', type=int, default=0, help='whether to init from ckpt')
+    parser.add_argument('--use_pretrain', type=int, default=1, help='whether to init from ckpt')
     parser.add_argument('--class_iter', type=int, default=3, help='training iteration for classification model')
-    parser.add_argument('--ckpt_file', type=str, default='location_net_009_0.665.pth', help='pretrained model name')
+    parser.add_argument('--ckpt_file', type=str, default='location_cluster_net_010_0.672.pth', help='pretrained model name')
     parser.add_argument('--enable_img_augmentation', type=int, default=1, help='whether to augment input image')
     parser.add_argument('--enable_audio_augmentation', type=int, default=1, help='whether to augment input audio')
     parser.add_argument('--batch_size', type=int, default=32, help='training batch size')
@@ -116,41 +117,42 @@ def main():
     parser.add_argument('--seed', type=int, default=10)
     args = parser.parse_args()
 
-    if args.init_num != 0 and args.use_pretrain:
-        import sys
-        print('If use ckpt, do not recommend to set init_num to 0.')
-        sys.exit()
 
-    train_dataset = Audioset_Dataset(args.data_dir, 'multi_train.pkl', args)
-    val_dataset = Audioset_Dataset(args.data_dir, 'multi_val.pkl', args)
+    train_dataset = Audioset_Dataset(args.data_dir, 'multi_train_data.pkl', args)
+    val_dataset = Audioset_Dataset(args.data_dir, 'multi_val_data.pkl', args)
 
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True,
                                   num_workers=args.num_threads)
     val_dataloader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, shuffle=False,
                                 num_workers=args.num_threads)
 
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     # net setup
     visual_backbone = resnet18(modal='vision')
     audio_backbone = resnet18(modal='audio')
     av_model = Location_Net_stage_two(visual_net=visual_backbone, audio_net=audio_backbone)
+    av_model_cuda = torch.nn.DataParallel(av_model)
+    av_model_cuda.to(device)
 
     if args.use_pretrain:
         PATH = os.path.join('ckpt/stage_one/', args.ckpt_file)
         state = torch.load(PATH)
-        av_model.load_state_dict(state, strict=False)
-    av_model_cuda = av_model.cuda()
+        av_model_cuda.load_state_dict(state, strict=False)
 
     # fixed model
     visual_backbone_fix = resnet18(modal='vision')
     audio_backbone_fix = resnet18(modal='audio')
     av_model_fix = Location_Net_stage_two(visual_net=visual_backbone_fix, audio_net=audio_backbone_fix)
+    av_model_fix_cuda = torch.nn.DataParallel(av_model_fix)
+    av_model_fix_cuda.to(device)
 
     if args.use_pretrain:
         PATH = os.path.join('ckpt/stage_one/', args.ckpt_file)
         state = torch.load(PATH)
-        av_model_fix.load_state_dict(state, strict=False)
+        av_model_fix_cuda.load_state_dict(state, strict=False)
         print('loaded weights')
-    av_model_fix_cuda = av_model_fix.cuda()
 
     # loading the object representation for stage_one
     obj_rep = np.load('obj_feature_softmax_avg_fc.npy')

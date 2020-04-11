@@ -25,8 +25,8 @@ class Location_Net_stage_one(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.sigmoid = nn.Sigmoid()
 
-        self.v_class_layer = nn.Linear(512, 15)
-        self.a_class_layer = nn.Linear(512, 15)
+        self.v_class_layer = nn.Linear(512, 13)
+        self.a_class_layer = nn.Linear(512, 13)
         self.pooling_v = nn.AdaptiveAvgPool2d((1, 1))
 
     def forward(self, v_input, a_input):
@@ -65,7 +65,7 @@ class Location_Net_stage_one(nn.Module):
 class Location_Net_stage_two(nn.Module):
     def __init__(self, visual_net, audio_net, use_obj_rep=True):
         super(Location_Net_stage_two, self).__init__()
-        self.class_num = 11
+        self.class_num = 13
         self.use_obj_rep = use_obj_rep
 
         # backbone net
@@ -88,8 +88,8 @@ class Location_Net_stage_two(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.sigmoid = nn.Sigmoid()
 
-        self.v_class_layer = nn.Linear(512,11)
-        self.a_class_layer = nn.Linear(512, 11)
+        self.v_class_layer = nn.Linear(512, 13)
+        self.a_class_layer = nn.Linear(512, 13)
         self.pooling_v = nn.AdaptiveAvgPool2d((1, 1))
 
         self.obj_pooling = nn.AdaptiveAvgPool2d((1, 1))
@@ -103,7 +103,6 @@ class Location_Net_stage_two(nn.Module):
         v = self.conv_v_1(v_fea)
         v = self.relu(v)
         v = self.conv_v_2(v)
-        v = self.relu(v)
 
         # audio pathway
         a = self.audio_net(a_input)
@@ -125,7 +124,7 @@ class Location_Net_stage_two(nn.Module):
         a_logits = self.a_class_layer(a_fea)
 
         # obj_mask
-        av_map_ = av_map.repeat(1, 11, 1, 1)
+        av_map_ = av_map.repeat(1, 13, 1, 1)
         v_fea = v_fea.permute(0, 2, 3, 1)
         obj_rep = obj_rep.permute(1, 0)
         obj_mask = torch.matmul(v_fea, obj_rep)
@@ -140,6 +139,6 @@ class Location_Net_stage_two(nn.Module):
         #obj_mask = torch.min(obj_mask, av_map_)
 
         sounding_objects = self.obj_pooling(obj_mask) #sounding_obj_mask)
-        sounding_objects = torch.flatten(sounding_objects,1)
+        sounding_objects = torch.flatten(sounding_objects, 1)
 
         return av_output, av_map, a_logits, sounding_objects, obj_mask

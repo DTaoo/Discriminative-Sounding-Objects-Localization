@@ -12,7 +12,7 @@ from model.location_model import Location_Net_stage_one
 from sklearn import cluster, metrics
 import numpy as np
 from sklearn.preprocessing import normalize
-
+import time
 
 def batch_organize(audio_data, posi_img_data, nega_img_data, posi_label, nega_label):
     batch_audio_data = torch.zeros(audio_data.shape[0] * 2, audio_data.shape[1], audio_data.shape[2],
@@ -57,9 +57,11 @@ def location_model_train(model, data_loader, optimizer, criterion):
     accs = 0
     count = 0
     losses = 0
+    batch_num = len(data_loader)
     for i, data in enumerate(data_loader, 0):
         if i % 200 == 0:
-            print('location batch:%d' % i)
+            time_str = time.asctime(time.localtime(time.time()))
+            print('%s:location batch:%d/%d' % (time_str,i,batch_num))
         audio_data, posi_img_data, nega_img_data, posi_label, nega_label, _, _ = data
         audio_data, image_data, av_labels, _ = batch_organize(audio_data, posi_img_data, nega_img_data, posi_label, nega_label)
 
@@ -155,6 +157,7 @@ def feature_clustering(data, label, val_data):
         if label[i] not in labels:
             labels.append(label[i])
     count = len(labels)
+    #print(count)
     kmeans = cluster.KMeans(n_clusters=count, random_state=0).fit(data)
     cluster_label = kmeans.labels_
     score = metrics.normalized_mutual_info_score(label, cluster_label)
@@ -163,16 +166,21 @@ def feature_clustering(data, label, val_data):
     return cluster_label, score, val_label
 
 
-def class_model_train(model, data_loader, optimizer, criterion, args):
+def class_model_train(model, data_loader, optimizer, criterion, args, device):
     model.v_class_layer = torch.nn.Linear(512, 15)
     model.v_class_layer.weight.data.normal_(0, 0.01)
     model.v_class_layer.bias.data.zero_()
-    model.v_class_layer.cuda()
+    #model.v_class_layer.cuda()
+    model.v_class_layer = torch.nn.DataParallel(model.v_class_layer)
+    model.v_class_layer.to(device)
+
 
     model.a_class_layer = torch.nn.Linear(512, 15)
     model.a_class_layer.weight.data.normal_(0, 0.01)
     model.a_class_layer.bias.data.zero_()
-    model.a_class_layer.cuda()
+    #model.a_class_layer.cuda()
+    model.a_class_layer = torch.nn.DataParallel(model.a_class_layer)
+    model.a_class_layer.to(device)
 
     model.train()
 
@@ -202,7 +210,7 @@ def class_model_train(model, data_loader, optimizer, criterion, args):
             losses += loss.detach().cpu().numpy()
             count += 1
 
-        #print('class loss is %.3f ' % (losses / count))
+        print('class loss is %.3f ' % (losses / count))
 
 
 def class_model_val(model, data_loader):
@@ -225,7 +233,7 @@ def class_model_val(model, data_loader):
             v_count += np.sum(v_logits == label)#label_[:, -1])
             a_count += np.sum(a_logits == label)#label_[:, -1])
             count += label.shape[0]
-    print('audio acc: %.3f, image acc: %.3f' % ((a_count/count), (v_count/count)))
+    print('class: audio acc: %.3f, image acc: %.3f' % ((a_count/count), (v_count/count)))
 
 
 
@@ -236,17 +244,17 @@ def main():
     parser.add_argument('--data_dir', type=str, default='/mnt/scratch/hudi/audioset-instrument/')
     parser.add_argument('--mode', type=str, default='train', help='train/val/test')
     parser.add_argument('--use_class_task', type=int, default=1, help='whether to use class task')
-    parser.add_argument('--init_num', type=int, default=0, help='epoch number for initializing the location model')
+    parser.add_argument('--init_num', type=int, default=10, help='epoch number for initializing the location model')
     parser.add_argument('--use_pretrain', type=int, default=0, help='whether to init from ckpt')
     parser.add_argument('--class_iter', type=int, default=3, help='training iteration for classification model')
-    parser.add_argument('--ckpt_file', type=str, default='location_net_009_0.665.pth', help='pretrained model name')
+    parser.add_argument('--ckpt_file', type=str, default='location_cluster_net_010_0.686.pth', help='pretrained model name')
     parser.add_argument('--enable_img_augmentation', type=int, default=1, help='whether to augment input image')
     parser.add_argument('--enable_audio_augmentation', type=int, default=1, help='whether to augment input audio')
-    parser.add_argument('--batch_size', type=int, default=32, help='training batch size')
+    parser.add_argument('--batch_size', type=int, default=32*8, help='training batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='training batch size')
     parser.add_argument('--epoch', type=int, default=2000, help='training epoch')
-    parser.add_argument('--gpu_ids', type=str, default='[0,1,2,3]', help='USING GPU IDS e.g.\'[0,4]\'')
-    parser.add_argument('--num_threads', type=int, default=12, help='number of threads')
+    parser.add_argument('--gpu_ids', type=str, default='[0,1,2,3,4,5,6,7]', help='USING GPU IDS e.g.\'[0,4]\'')
+    parser.add_argument('--num_threads', type=int, default=100, help='number of threads')
     parser.add_argument('--seed', type=int, default=10)
     args = parser.parse_args()
 
@@ -255,24 +263,32 @@ def main():
         print('If use ckpt, do not recommend to set init_num to 0.')
         sys.exit()
 
-    train_dataset = Audioset_Dataset(args.data_dir, 'single_train.pkl', args)
-    val_dataset = Audioset_Dataset(args.data_dir, 'single_val.pkl', args)
+    train_dataset = Audioset_Dataset(args.data_dir, 'single_train_data.pkl', args)
+    val_dataset = Audioset_Dataset(args.data_dir, 'single_val_data.pkl', args)
 
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True,
                                   num_workers=args.num_threads)
     val_dataloader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, shuffle=False,
                                 num_workers=args.num_threads)
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     # net setup
     visual_backbone = resnet18(modal='vision')
     audio_backbone = resnet18(modal='audio')
     av_model = Location_Net_stage_one(visual_net=visual_backbone, audio_net=audio_backbone)
 
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    av_model_cuda = torch.nn.DataParallel(av_model)
+    av_model_cuda.to(device)
+
+    #av_model_cuda = av_model.cuda()
+
     if args.use_pretrain:
         PATH = os.path.join('ckpt/stage_one/', args.ckpt_file)
         state = torch.load(PATH)
-        av_model.load_state_dict(state)
-    av_model_cuda = av_model.cuda()
+        av_model_cuda.load_state_dict(state)
+        print('loaded weights')
 
     loss_func_BCE_location = torch.nn.BCELoss(reduce=True)
     loss_func_BCE_class = torch.nn.CrossEntropyLoss()  # torch.nn.BCELoss(reduce=True)
@@ -283,7 +299,6 @@ def main():
 
     init_num = 0
     for e in range(args.epoch):
-
 
         ############################### location training #################################
         print('Epoch is %03d' % e)
@@ -300,7 +315,7 @@ def main():
             print('obj_NMI is %.3f' % nmi_score)
 
             obj_fea = []
-            for i in range(15):
+            for i in range(13):
                 cur_idx = pseudo_label == i
                 cur_fea = obj_features[cur_idx]
                 obj_fea.append(np.mean(cur_fea, 0))
@@ -312,14 +327,14 @@ def main():
             class_dataloader_val = DataLoader(dataset=class_dataset_val, batch_size=args.batch_size, shuffle=False,
                                               num_workers=args.num_threads)
 
-            class_model_train(av_model_cuda, class_dataloader, optimizer_location, loss_func_BCE_class, args)
+            class_model_train(av_model_cuda, class_dataloader, optimizer_location, loss_func_BCE_class, args, device)
             class_model_val(av_model_cuda, class_dataloader_val)
 
         print('train acc is %.3f, val acc is %.3f' % (train_location_acc, eva_location_acc))
         init_num += 1
-        if e % 3 == 0:
-            PATH = 'ckpt/video_cluster/location_cluster_net_softmax_%03d_%.3f.pth' % (e, eva_location_acc)
-            # torch.save(av_model_cuda.state_dict(), PATH)
+        if e % 1 == 0:
+            PATH = 'ckpt/stage_one/location_cluster_net_%03d_%.3f.pth' % (e, eva_location_acc)
+            torch.save(av_model_cuda.state_dict(), PATH)
 
 if __name__ == '__main__':
     main()
