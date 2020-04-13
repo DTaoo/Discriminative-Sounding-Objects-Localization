@@ -18,11 +18,12 @@ def cal_ciou():
         if len(gt[k]['bbox']) == 0:
             continue
         
-        box = gt[k]['bbox'][0]['normbox']
-        box = np.array(box) * 224
-        #calculate groundtruth map of size (224, 224)
+        boxs = gt[k]['bbox'][0]['normbox']
         gtmap = np.zeros((224, 224))
-        gtmap[int(box[1]): int(box[1]+box[3]), int(box[0]): int(box[0]+box[2])] = 1
+        for box in boxs:
+            box = np.array(box) * 224
+            #calculate groundtruth map of size (224, 224)
+            gtmap[int(box[1]): int(box[1]+box[3]), int(box[0]): int(box[0]+box[2])] = 1
         #resize predited avmap to (224, 224)
         predmap = cv2.resize(pred[k][0], (224, 224))
         #calculate ciou
