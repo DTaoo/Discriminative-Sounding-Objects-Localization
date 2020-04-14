@@ -18,7 +18,7 @@ def cal_ciou():
         if len(gt[k]['bbox']) == 0:
             continue
         
-        boxs = gt[k]['bbox'][0]['normbox']
+        boxs = [gt[k]['bbox'][i]['normbox'] for i in range(len(gt[k]['bbox']))]
         gtmap = np.zeros((224, 224))
         for box in boxs:
             box = np.array(box) * 224
