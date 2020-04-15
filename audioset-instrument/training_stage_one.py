@@ -167,7 +167,7 @@ def feature_clustering(data, label, val_data):
 
 
 def class_model_train(model, data_loader, optimizer, criterion, args, device):
-    model.v_class_layer = torch.nn.Linear(512, 15)
+    model.v_class_layer = torch.nn.Linear(512, 13)
     model.v_class_layer.weight.data.normal_(0, 0.01)
     model.v_class_layer.bias.data.zero_()
     #model.v_class_layer.cuda()
@@ -175,7 +175,7 @@ def class_model_train(model, data_loader, optimizer, criterion, args, device):
     model.v_class_layer.to(device)
 
 
-    model.a_class_layer = torch.nn.Linear(512, 15)
+    model.a_class_layer = torch.nn.Linear(512, 13)
     model.a_class_layer.weight.data.normal_(0, 0.01)
     model.a_class_layer.bias.data.zero_()
     #model.a_class_layer.cuda()
