@@ -3,7 +3,7 @@ import torch.nn as nn
 import random
 
 class Cluster_layer(nn.Module):
-    def __init__(self, input_dim = 512, num_cluster=2, iters=5, beta=-10, **kwargs):
+    def __init__(self, input_dim = 512, num_cluster=2, iters=10, beta=-10, **kwargs):
         super(Cluster_layer, self).__init__()
         self.input_dim = input_dim
         self.num_cluster = num_cluster
