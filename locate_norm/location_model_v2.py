@@ -3,7 +3,7 @@ import torch.nn as nn
 
 class Location_Net_stage_one(nn.Module):
     def __init__(self, visual_net, audio_net):
-        super(Location_Net, self).__init__()
+        super(Location_Net_stage_one, self).__init__()
 
         # backbone net
         self.visual_net = visual_net
