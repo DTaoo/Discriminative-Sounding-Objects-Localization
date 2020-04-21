@@ -6,7 +6,7 @@ from torch import optim
 import numpy as np
 from data.MUSIC_dataset import MUSIC_Dataset, MUSIC_AV_Classify
 
-from model.base_model2 import resnet18
+from model.base_model import resnet18
 from model.dmc_model import DMC_NET
 
 from sklearn import cluster, metrics
@@ -167,7 +167,7 @@ def main():
                                  num_workers=args.num_threads)
 
     # net setup
-    visual_backbone = resnet18(modal='vision',pretrained=True)
+    visual_backbone = resnet18(modal='vision',pretrained=False)
     audio_backbone = resnet18(modal='audio')
     av_model = DMC_NET(visual_net=visual_backbone, audio_net=audio_backbone)
 
