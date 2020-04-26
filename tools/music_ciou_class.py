@@ -14,7 +14,9 @@ duetkeys = {13: 'accordion', 3: 'acoustic_guitar', 1: 'cello', 12: 'flute', 8: '
             10: 'trumpet', 11: 'violin'}
 
 cious = []
+nosounds = []
 thres = 0.2#threshold to determine whether positive on avmap
+nosound_thres = 1/11#nosound threshold 1/13 for audioset and 1/11 for music
 
 for k in pred:
     if k not in gt:
@@ -30,7 +32,16 @@ for k in pred:
         if index not in boxs:
             boxs[index] = []
         boxs[index].append(box['normbox'])
-
+        
+    nosound = []
+    for idx in range(len(pred[k])):
+        if idx in boxs:
+            continue
+        predmap = cv2.resize(pred[k][idx], (224, 224))
+        nosound.append(np.sum(predmap<=nosound_thres) / (224*224))
+    nosound = np.mean(nosound)
+    nosounds.append(nosound)
+    
     ciou = []
     for idx in boxs:
         gtmap = np.zeros((224, 224))
@@ -41,7 +52,7 @@ for k in pred:
         #resize predited avmap to (224, 224)
         predmap = cv2.resize(pred[k][idx], (224, 224))
         #calculate ciou
-        ciou.append(np.sum((predmap>thres) * (gtmap>0)) / (np.sum(gtmap) + np.sum((predmap>thres) * (gtmap==0))))
+        ciou.append(np.sum((predmap>thres*np.max([predmap])) * (gtmap>0)) / (np.sum(gtmap) + np.sum((predmap>thres*np.max(predmap)) * (gtmap==0))))
     ciou = np.mean(ciou)
     cious.append(ciou)
     
@@ -52,4 +63,4 @@ for i in range(21):
     results.append(result)
 x = [0.05 * i for i in range(21)]
 auc = sklearn.metrics.auc(x, results)
-print(auc, results[10])
+print('AUC %.3f , CIOU@0.5 %.3f , average nosound %.3f'%(auc, results[10], np.mean(nosounds)))
