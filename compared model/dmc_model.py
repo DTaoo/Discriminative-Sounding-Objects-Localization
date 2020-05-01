@@ -20,7 +20,7 @@ class Cluster_layer(nn.Module):
         o = torch.unsqueeze(u_vecs[:, 50, :], dim=1)
         count = 1
         while(self.num_cluster-count > 0):
-            current_o = torch.unsqueeze(u_vecs[:, 150, :], dim=1)  #ini_interval*count
+            current_o = torch.unsqueeze(u_vecs[:, ini_interval*count, :], dim=1)  #ini_interval*count
             o = torch.cat([o, current_o], dim=1)
             count += 1
 
@@ -39,7 +39,7 @@ class Cluster_layer(nn.Module):
 
 
 class DMC_NET(nn.Module):
-    def __init__(self, visual_net, audio_net):
+    def __init__(self, visual_net, audio_net, v_cluster_num = 2, a_cluster_num = 1):
         super(DMC_NET, self).__init__()
 
         # backbone net
@@ -60,8 +60,8 @@ class DMC_NET(nn.Module):
         # fusion ops
         self.fc_av = nn.Linear(1, 2)
 
-        self.v_clustering = Cluster_layer()
-        #self.a_clustering = Cluster_layer()
+        self.v_clustering = Cluster_layer(num_cluster=v_cluster_num)
+        self.a_clustering = Cluster_layer(num_cluster=a_cluster_num)
         self.epsilon = torch.tensor(1e-10).type(torch.FloatTensor).cuda()
 
 
@@ -76,10 +76,11 @@ class DMC_NET(nn.Module):
 
         # audio pathway
         a_fea = self.audio_net(a_input)
-        a_centers = self.pooling(a_fea)
-        a_centers = torch.flatten(a_centers, 1)
-        a_centers = self.fc_a_1(a_centers)
-        a_centers = a_centers.unsqueeze(1)
+        (B, C, H, W) = a_fea.size()
+        a_fea = a_fea.view(B, C, H*W)
+        a_fea = a_fea.permute(0,2,1)
+        a_fea = self.fc_a_1(a_fea)
+        a_centers, a_assign = self.a_clustering(a_fea)
 
         v_centers_ = torch.sum(v_centers ** 2, dim=2, keepdim=True)
         a_centers_ = torch.sum(a_centers ** 2, dim=2, keepdim=True)
@@ -87,4 +88,5 @@ class DMC_NET(nn.Module):
         distance_ = torch.sqrt(torch.max(v_centers_ - 2 * torch.bmm(v_centers, a_centers.permute(0, 2, 1)) + a_centers_.permute(0, 2, 1), self.epsilon))
         distance = torch.min(distance_, dim=1)
         distance = distance.values
+
         return distance, v_assign, distance_
