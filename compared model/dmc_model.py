@@ -15,9 +15,9 @@ class Cluster_layer(nn.Module):
 
         (batch_size, input_num, feature_dim) = u_vecs.size()
 
-        ini_interval = int(196/self.num_cluster)  #
+        ini_interval = int(input_num/self.num_cluster)  #
 
-        o = torch.unsqueeze(u_vecs[:, 50, :], dim=1)
+        o = torch.unsqueeze(u_vecs[:, 0, :], dim=1)
         count = 1
         while(self.num_cluster-count > 0):
             current_o = torch.unsqueeze(u_vecs[:, ini_interval*count, :], dim=1)  #ini_interval*count
