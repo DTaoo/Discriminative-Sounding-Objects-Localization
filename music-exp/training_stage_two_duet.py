@@ -129,7 +129,7 @@ def location_model_eva(model, data_loader, obj_rep):
     return accs / count
 
 
-def main(weight):
+def main():
     parser = argparse.ArgumentParser(description='AID_PRETRAIN')
     parser.add_argument('--data_list_dir', type=str,
                         default='./data/data_indicator/music/duet')
@@ -152,6 +152,8 @@ def main(weight):
     parser.add_argument('--gpu_ids', type=str, default='[0,1,2,3]', help='USING GPU IDS e.g.\'[0,4]\'')
     parser.add_argument('--num_threads', type=int, default=12, help='number of threads')
     parser.add_argument('--seed', type=int, default=10)
+    parser.add_argument('--cluster', type=int, default=11)
+    parser.add_argument('--mask', type=float, default=0.05)
     args = parser.parse_args()
     
     weight = args.weight
@@ -171,11 +173,11 @@ def main(weight):
     # net setup
     visual_backbone = resnet18(modal='vision', pretrained=True)
     audio_backbone = resnet18(modal='audio')
-    av_model = Location_Net_stage_two(visual_net=visual_backbone, audio_net=audio_backbone)
+    av_model = Location_Net_stage_two(visual_net=visual_backbone, audio_net=audio_backbone, cluster=args.cluster)
     if args.use_pretrain:
         PATH = args.ckpt_file
         state = torch.load(PATH)
-        av_model.load_state_dict(state)
+        av_model.load_state_dict(state, strict=False)
         print(PATH)
 
     av_model_cuda = av_model.cuda()
@@ -183,16 +185,16 @@ def main(weight):
     # fixed model
     visual_backbone_fix = resnet18(modal='vision', pretrained=True)
     audio_backbone_fix = resnet18(modal='audio')
-    av_model_fix = Location_Net_stage_one(visual_net=visual_backbone_fix, audio_net=audio_backbone_fix)
+    av_model_fix = Location_Net_stage_one(visual_net=visual_backbone_fix, audio_net=audio_backbone_fix, cluster=args.cluster)
     if args.use_pretrain:
-        PATH = os.path.join('ckpt/stage_one_cosine2/', 'location_cluster_net_iter_006_av_class.pth')
+        PATH = os.path.join('ckpt/stage_one_%.2f_%d' % (args.mask, args.cluster), 'location_cluster_net_iter_010_av_class.pth')
         state = torch.load(PATH)
         av_model_fix.load_state_dict(state)
         print('loaded weights')
     av_model_fix_cuda = av_model_fix.cuda()
 
 
-    obj_rep = np.load('obj_features2/obj_feature_softmax_avg_fc_epoch_6_av_entire.npy')
+    obj_rep = np.load('obj_features_%.2f_%d/obj_feature_softmax_avg_fc_epoch_10_av_entire.npy' % (args.mask, args.cluster))
 
     loss_func_BCE_location = torch.nn.BCELoss(reduce=True)
     loss_func_BCE_category = torch.nn.KLDivLoss(reduce=True)
@@ -212,11 +214,10 @@ def main(weight):
         print('train acc is %.3f eval acc is %.3f' % (train_location_acc, eva_location_acc))
         init_num += 1
         if e % 1 == 0:
-            PATH = 'ckpt/ablation_duet/location_cluster_net_%.1f_%03d_%.3f_avg_whole.pth' % (weight, e, train_location_acc)
+            PATH = 'ckpt/stage_duet_%.2f_%d/location_cluster_net_%03d_%.3f_avg_whole.pth' % (args.mask, args.cluster, e, train_location_acc)
             torch.save(av_model_cuda.state_dict(), PATH)
 
 if __name__ == '__main__':
     
-    for weight in [0.1]:
-        main(weight)
+    main()
 

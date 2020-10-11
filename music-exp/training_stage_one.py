@@ -14,6 +14,8 @@ import numpy as np
 from sklearn.preprocessing import normalize
 import time
 import pickle
+import cv2
+import matplotlib.pyplot as plt
 
 def batch_organize(audio_data, posi_img_data, nega_img_data, posi_label, nega_label):
     batch_audio_data = torch.zeros(audio_data.shape[0] * 2, audio_data.shape[1], audio_data.shape[2],
@@ -99,7 +101,7 @@ def location_model_eva(model, data_loader):
             audio_data, image_data = audio_data.type(torch.FloatTensor).cuda(), \
                                      image_data.type(torch.FloatTensor).cuda()
 
-            av_outputs, _, _, _ ,_ ,_ = model(image_data, audio_data)
+            av_outputs, av_maps, _, _ ,_ ,_ = model(image_data, audio_data)
 
             accs += eva_metric(av_outputs.detach().cpu().numpy(), av_labels.numpy())
             count += 1
@@ -107,7 +109,44 @@ def location_model_eva(model, data_loader):
     return accs / count
 
 
-def extract_feature(model, data_loader):
+def location_model_test(model, data_loader):
+    model.eval()
+    accs = 0
+    num = len(data_loader.dataset)
+    count = 0
+    results = {}
+
+    with torch.no_grad():
+        for i, data in enumerate(data_loader, 0):
+            audio_data, posi_img_data, nega_img_data, posi_label, nega_label, path, _ = data
+            audio_data, image_data, av_labels, _ = batch_organize(audio_data, posi_img_data, nega_img_data, posi_label, nega_label)
+            audio_data, image_data = audio_data.type(torch.FloatTensor).cuda(), \
+                                     image_data.type(torch.FloatTensor).cuda()
+
+            av_outputs, av_maps, _, _ ,_ ,_ = model(image_data, audio_data)
+            av_maps = av_maps.detach().cpu().numpy()
+            av_maps = av_maps[::2]
+            visualize(posi_img_data, av_maps, i)
+            for i in range(len(path)):
+                results[path[i][-38:]] = av_maps[i]
+
+            accs += eva_metric(av_outputs.detach().cpu().numpy(), av_labels.numpy())
+            count += 1
+    pickle.dump(results, open('single.pkl', 'wb'))
+    return accs / count
+
+def visualize(image, avmaps, idx):
+    image = image.permute(0, 2, 3, 1).contiguous().cpu().numpy()
+    for i in range(image.shape[0]):
+        img = image[i] * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+        avmap = avmaps[i, 0]
+        avmap = cv2.resize(avmap, (224, 224))
+        avmap = avmap * 255
+        avmap = cv2.applyColorMap(avmap.astype(np.uint8), cv2.COLORMAP_JET)
+        img = 0.6 * img + 0.4 * (avmap[:, :, ::-1] / 255)
+        plt.imsave('visualize/%d_%d.jpg' % (idx, i), img)
+
+def extract_feature(model, data_loader, mask=0.05):
     print('extracting features...')
     model.eval()
     accs = 0
@@ -133,7 +172,7 @@ def extract_feature(model, data_loader):
             a_fea = a_fea.detach().cpu().numpy()
 
             for j in range(location_map.shape[0]):
-                obj_mask = np.uint8(location_map[j] > 0.05)
+                obj_mask = np.uint8(location_map[j] > mask)
                 obj_mask = location_dilation(obj_mask)
 
                 img_rep = v_fea[j, :, :, :]  # such as 512 x 14 x 14
@@ -150,14 +189,14 @@ def extract_feature(model, data_loader):
     return np.asarray(obj_features), np.asarray(img_features), np.asarray(aud_features),  np.asarray(obj_labels), img_dirs, aud_dirs
 
 
-def feature_clustering(data, label, val_data):
+def feature_clustering(data, label, val_data, clusters):
     data = normalize(data, norm='l2')
     val_data = normalize(val_data, norm='l2')
     labels = []
     for i in range(label.shape[0]):
         if label[i] not in labels:
             labels.append(label[i])
-    count = len(labels)
+    count = clusters
     #print(count)
     kmeans = cluster.KMeans(n_clusters=count, algorithm='full').fit(data)
     cluster_label = kmeans.labels_
@@ -168,12 +207,12 @@ def feature_clustering(data, label, val_data):
 
 
 def class_model_train(model, data_loader, optimizer, criterion, args):
-    model.v_class_layer = torch.nn.Linear(512, 11)
+    model.v_class_layer = torch.nn.Linear(512, args.cluster)
     model.v_class_layer.weight.data.normal_(0, 0.01)
     model.v_class_layer.bias.data.zero_()
     model.v_class_layer.cuda()
 
-    model.a_class_layer = torch.nn.Linear(512, 11)
+    model.a_class_layer = torch.nn.Linear(512, args.cluster)
     model.a_class_layer.weight.data.normal_(0, 0.01)
     model.a_class_layer.bias.data.zero_()
     model.a_class_layer.cuda()
@@ -256,18 +295,20 @@ def main():
                         default='./data/MUSIC_label/MUSIC_solo_videos.json')
 
     parser.add_argument('--use_class_task', type=int, default=1, help='whether to use class task')
-    parser.add_argument('--init_num', type=int, default=6, help='epoch number for initializing the location model')
-    parser.add_argument('--use_pretrain', type=int, default=1, help='whether to init from ckpt')
+    parser.add_argument('--init_num', type=int, default=1, help='epoch number for initializing the location model')
+    parser.add_argument('--use_pretrain', type=int, default=0, help='whether to init from ckpt')
     parser.add_argument('--ckpt_file', type=str, default='location_cluster_net_norm_006_0.680.pth', help='pretrained model name')
     parser.add_argument('--enable_img_augmentation', type=int, default=1, help='whether to augment input image')
     parser.add_argument('--enable_audio_augmentation', type=int, default=1, help='whether to augment input audio')
     parser.add_argument('--batch_size', type=int, default=32, help='training batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='training batch size')
-    parser.add_argument('--epoch', type=int, default=7, help='training epoch')
+    parser.add_argument('--epoch', type=int, default=15, help='training epoch')
     parser.add_argument('--class_iter', type=int, default=3, help='training iteration for classification model')
     parser.add_argument('--gpu_ids', type=str, default='[0,1,2,3]', help='USING GPU IDS e.g.\'[0,4]\'')
     parser.add_argument('--num_threads', type=int, default=12, help='number of threads')
     parser.add_argument('--seed', type=int, default=10)
+    parser.add_argument('--cluster', type=int, default=11)
+    parser.add_argument('--mask', type=float, default=0.05)
     args = parser.parse_args()
 
     train_list_file = os.path.join(args.data_list_dir, 'solo_training_1.txt')
@@ -289,7 +330,7 @@ def main():
     # net setup
     visual_backbone = resnet18(modal='vision', pretrained=True)
     audio_backbone  = resnet18(modal='audio')
-    av_model = Location_Net_stage_one(visual_net=visual_backbone, audio_net=audio_backbone)
+    av_model = Location_Net_stage_one(visual_net=visual_backbone, audio_net=audio_backbone, cluster=args.cluster)
 
     av_model_cuda = av_model.cuda()
 
@@ -300,6 +341,10 @@ def main():
         print('loaded weights')
     else:
         av_model_cuda.conv_av.weight.data.fill_(5.)
+    
+    if args.mode == 'test':
+        location_model_test(av_model_cuda, test_dataloader)
+        return
 
     loss_func_BCE_location = torch.nn.BCELoss(reduce=True)
     loss_func_BCE_class = torch.nn.CrossEntropyLoss()  # torch.nn.BCELoss(reduce=True)
@@ -309,12 +354,12 @@ def main():
                            weight_decay=0.0001)
  
     init_num = 0
-    obj_features, img_features, aud_features, labels, img_dirs, aud_dirs \
-        = extract_feature(av_model_cuda, train_dataloader)
-    np.save('img_feature', img_features)
-    np.save('obj_feature', obj_features)
-    np.save('labels', labels)
-    return
+    # obj_features, img_features, aud_features, labels, img_dirs, aud_dirs \
+    #     = extract_feature(av_model_cuda, train_dataloader)
+    # np.save('img_feature', img_features)
+    # np.save('obj_feature', obj_features)
+    # np.save('labels', labels)
+    # return
 
     for e in range(args.epoch):
 
@@ -327,14 +372,14 @@ def main():
         init_num += 1
         if e % 1 == 0:
             ee = e
-            PATH = 'ckpt/stage_one_cosine3/location_cluster_net_%03d_%.3f_av_local.pth' % (ee, eva_location_acc)
+            PATH = 'ckpt/stage_one_%.2f_%d/location_cluster_net_%03d_%.3f_av_local.pth' % (args.mask, args.cluster, ee, eva_location_acc)
             torch.save(av_model_cuda.state_dict(), PATH)
 
         ############################### classification training #################################
         if init_num > args.init_num and args.use_class_task:
 
-            obj_features, img_features, aud_features, labels, img_dirs, aud_dirs = extract_feature(av_model_cuda, train_dataloader)
-            val_obj_features, val_img_features, val_aud_features, val_labels, val_img_dirs, val_aud_dirs = extract_feature(av_model_cuda, val_dataloader)
+            obj_features, img_features, aud_features, labels, img_dirs, aud_dirs = extract_feature(av_model_cuda, train_dataloader, args.mask)
+            val_obj_features, val_img_features, val_aud_features, val_labels, val_img_dirs, val_aud_dirs = extract_feature(av_model_cuda, val_dataloader, args.mask)
 
             obj_features_ = normalize(obj_features, norm='l2')
             aud_features_ = normalize(aud_features, norm='l2')
@@ -344,21 +389,21 @@ def main():
             val_aud_features_ = normalize(val_aud_features, norm='l2')
             val_av_features = np.concatenate((val_obj_features_, val_aud_features_), axis=1)
 
-            pseudo_label, nmi_score, val_pseudo_label = feature_clustering(obj_features, labels, val_obj_features)
+            pseudo_label, nmi_score, val_pseudo_label = feature_clustering(obj_features, labels, val_obj_features, args.cluster)
             print('obj_NMI is %.3f' % nmi_score)
 
             obj_fea = []
-            for i in range(11):
+            for i in range(args.cluster):
                 cur_idx = pseudo_label == i
                 cur_fea = obj_features[cur_idx]
                 obj_fea.append(np.mean(cur_fea, 0))
             ee = e
-            np.save('obj_features3/obj_feature_softmax_avg_fc_epoch_%d_av_entire.npy' % ee, obj_fea)
+            np.save('obj_features_%.2f_%d/obj_feature_softmax_avg_fc_epoch_%d_av_entire.npy' % (args.mask, args.cluster, ee), obj_fea)
 
             cluster_dict = {}
             cluster_dict['pseudo_label'] = pseudo_label
             cluster_dict['gt_labels'] = labels
-            cluster_ptr = open('obj_features3/cluster_%d.pkl' % ee, 'wb')
+            cluster_ptr = open('obj_features_%.2f_%d/cluster_%d.pkl' % (args.mask, args.cluster, ee), 'wb')
             pickle.dump(cluster_dict, cluster_ptr)
 
 
@@ -373,7 +418,7 @@ def main():
 
             if e % 1 == 0:
                 ee = e
-                PATH = 'ckpt/stage_one_cosine3/location_cluster_net_iter_%03d_av_class.pth' % ee
+                PATH = 'ckpt/stage_one_%.2f_%d/location_cluster_net_iter_%03d_av_class.pth' % (args.mask, args.cluster, ee)
                 torch.save(av_model_cuda.state_dict(), PATH)
 
 

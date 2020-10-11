@@ -219,7 +219,7 @@ def _resnet(arch, block, layers, pretrained, progress, modal, **kwargs):
     model = ResNet(block, layers, modal, **kwargs)
     if pretrained:
         print('load pretrained res-18')
-        model.load_state_dict(torch.load('/home/ruiq/multiple-sound-source-localization/resnet18-5c106cde.pth'), strict=False)
+        model.load_state_dict(torch.load('./resnet18-5c106cde.pth'), strict=False)
     return model
 
 def resnet18(pretrained=False, progress=True, modal='vision',**kwargs):
