@@ -13,6 +13,8 @@ Code for NeurIPS 2020 paper **Discriminative Sounding Objects Localization via S
 
 ### Running Procedure
 
+For experiments on Music or AudioSet-instrument, the training and evaluation procedures are similar, respectively under the folder `music-exp` and `audioset-instrument`. Here, we take the experiments on Music dataset as an example.
+
 #### Data Preparation
 
 - Download dataset, e.g., MUSIC, and split into training/validation/testing set
@@ -30,8 +32,6 @@ Code for NeurIPS 2020 paper **Discriminative Sounding Objects Localization via S
   ```
 
 #### Training
-
-For experiments on Music or AudioSet-instrument, the training and evaluation procedures are similar, respectively under the folder `music-exp` and `audioset-instrument`.
 
 ##### Stage one
 
