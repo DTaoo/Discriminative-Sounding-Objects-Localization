@@ -1,6 +1,6 @@
 # **Discriminative Sounding Objects Localization**
 
-Code for NeurIPS 2020 paper **Discriminative Sounding Objects Localization via Self-supervised Audiovisual Matching**. The code is implemented on PyTorch with python3.
+Code for our NeurIPS 2020 paper **Discriminative Sounding Objects Localization via Self-supervised Audiovisual Matching** (The previous title is **Learning to Discriminatively Localize Sounding Objects in a Cocktail-party Scenario**).  The code is implemented on PyTorch with python3.
 
 ### Requirements
 
