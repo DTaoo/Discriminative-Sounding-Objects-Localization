@@ -31,6 +31,8 @@ For experiments on Music or AudioSet-instrument, the training and evaluation pro
   python3 data/cut_audio.py
   ```
 
+The sounding object bounding box annotations on solo and duet are stored in `solotest.json` and `duettest.json`, and the data and annotations of synthetic set are available at https://zenodo.org/record/4079386#.X4PFodozbb2
+
 #### Training
 
 ##### Stage one
