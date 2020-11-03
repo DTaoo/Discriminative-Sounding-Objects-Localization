@@ -16,7 +16,7 @@ For experiments on Music or AudioSet-instrument, the training and evaluation pro
 
 #### Data Preparation
 
-- Download dataset, e.g., MUSIC, and split into training/validation/testing set
+- Download dataset, e.g., MUSIC, and split into training/validation/testing set. Specifically, for the training@stage_one, please use the [https://github.com/DTaoo/Discriminative-Sounding-Objects-Localization/blob/master/music-exp/data/data_indicator/music/solo/solo_training_1.txt](solo_training_1.txt). For the training@stage_two, we use the the music clip in [https://github.com/DTaoo/Discriminative-Sounding-Objects-Localization/blob/master/music-exp/data/data_indicator/music/solo/solo_training_2.txt](solo_training_2.txt) to synthesize the cocktail-party scenarios.
 
 - Extract frames at 4 fps by running 
 
