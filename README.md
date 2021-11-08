@@ -81,7 +81,7 @@ python3 training_stage_two.py
 We first generate localization results and save then as a pkl file, then calculate metrics, IoU and AUC and also generate visualizations, by running
 
 ```
-python3 test.py
+python3 training_stage_one.py --mode test --use_pretrain 1 --ckpt_file your_ckpt_file_path
 python3 tools.py
 ```
 
