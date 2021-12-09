@@ -27,24 +27,24 @@ def audio_extract(wav_name, sr=16000):
         end = sr * (i+1)
         cur_wav = wav[start:end]
         assert cur_wav.shape == (sr,)
-        #spec = librosa.core.stft(cur_wav, n_fft=0.01*sr, hop_length=0.005*sr, 
-        #    window='hann', center=True, pad_mode='constant')
+        spec = librosa.core.stft(cur_wav, n_fft=0.01*sr, hop_length=0.005*sr, 
+            window='hann', center=True, pad_mode='constant')
         
-        # spec = librosa.core.stft(cur_wav, n_fft=160, hop_length=80, 
-        #     window='hann', center=True, pad_mode='constant')
+        spec = librosa.core.stft(cur_wav, n_fft=160, hop_length=80, 
+            window='hann', center=True, pad_mode='constant')
         
-        #mel = librosa.feature.melspectrogram(S = np.abs(spec), sr=sr, n_mels=256, fmax=sr/2)
+        # mel = librosa.feature.melspectrogram(S = np.abs(spec), sr=sr, n_mels=256, fmax=sr/2)
         
-        # mel = librosa.feature.melspectrogram(S = np.abs(spec), sr=sr, n_mels=64, fmax=sr/2)
-        # log_mel = librosa.core.power_to_db(mel)
-        # log_mel_T = log_mel.T.astype('float32')
-        # assert log_mel_T.shape == (201,64)
+        mel = librosa.feature.melspectrogram(S = np.abs(spec), sr=sr, n_mels=64, fmax=sr/2)
+        log_mel = librosa.core.power_to_db(mel)
+        log_mel_T = log_mel.T.astype('float32')
+        assert log_mel_T.shape == (201,64)
         #pdb.set_trace()
         save_name = os.path.join(save_path, '{:03d}.pkl'.format(i))
         #print(save_name)
         
         with open(save_name, 'wb') as fid:
-            pickle.dump(cur_wav, fid)
+            pickle.dump(log_mel_T, fid)
 
 for audio in audios:
     print(audio)
