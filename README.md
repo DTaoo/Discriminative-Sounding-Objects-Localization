@@ -1,6 +1,10 @@
 # **Discriminative Sounding Objects Localization**
 
 Code for our NeurIPS 2020 paper [**Discriminative Sounding Objects Localization via Self-supervised Audiovisual Matching**](https://arxiv.org/abs/2010.05466) (The previous title is **Learning to Discriminatively Localize Sounding Objects in a Cocktail-party Scenario**).  The code is implemented on PyTorch with python3.
+
+The code for TPAMI version can be found here: https://github.com/GeWu-Lab/CSOL_TPAMI2021.
+
+
 ### Requirements
 
 - PyTorch 1.1
